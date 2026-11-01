@@ -1008,7 +1008,7 @@ func TestScreenshotLimits(t *testing.T) {
 func bodyOverhead(t *testing.T, d Draft, id string) int {
 	t.Helper()
 	d.ReportID, d.Body = id, ""
-	return len(finalBody(d, id))
+	return len(finalBody(d, id, ""))
 }
 
 func TestSubmitRejectsOversizedBody(t *testing.T) {
@@ -1021,7 +1021,7 @@ func TestSubmitRejectsOversizedBody(t *testing.T) {
 	atLimit := strings.Repeat("x", MaxBodyBytes-overhead)
 	probe := draft
 	probe.ReportID, probe.Body = id, atLimit
-	if got := len(finalBody(probe, id)); got != MaxBodyBytes {
+	if got := len(finalBody(probe, id, "")); got != MaxBodyBytes {
 		t.Fatalf("setup: finalBody=%d, want %d", got, MaxBodyBytes)
 	}
 	{
@@ -1062,5 +1062,37 @@ func TestSubmitRejectsOversizedBody(t *testing.T) {
 		if len(f.calls) != 0 {
 			t.Fatalf("must fail before any gh call, got %v", f.calls)
 		}
+	}
+}
+
+// A Confirm comment carries its own suffix, and its fallback gist link is only known after upload:
+// the longest possible comment is budgeted before any gh call, and the posted comment never exceeds it.
+func TestSubmitConfirmBodyBudget(t *testing.T) {
+	d := Draft{ReportID: "abc", Mode: Confirm, Repo: "projectbluefin/dakota", IssueRef: "3", Attachment: []byte("{}")}
+	overhead := len(finalBody(d, "abc", maxGistURL))
+	d.Body = strings.Repeat("x", MaxBodyBytes-overhead)
+	f := newFake()
+	f.fail["artifact create"] = true
+	f.errs = map[string]string{"artifact create": "HTTP 403"}
+	f.out["gist create"] = maxGistURL + "\n"
+	if _, err := Submit(context.Background(), f.exec, t.TempDir(), d); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(f.in("issue comment")); got != MaxBodyBytes {
+		t.Fatalf("posted comment is %d bytes, want %d", got, MaxBodyBytes)
+	}
+
+	d.Body += "y"
+	f = newFake()
+	if _, err := Submit(context.Background(), f.exec, t.TempDir(), d); !errors.Is(err, ErrBodyTooLarge) || len(f.calls) != 0 {
+		t.Fatalf("err=%v calls=%v", err, f.calls)
+	}
+
+	// Without an attachment the confirm marker alone pushes a NewIssue-sized body over.
+	nd := Draft{ReportID: "abc", Repo: "projectbluefin/dakota"}
+	d.Attachment, d.Body = nil, strings.Repeat("z", MaxBodyBytes-len(finalBody(nd, "abc", "")))
+	f = newFake()
+	if _, err := Submit(context.Background(), f.exec, t.TempDir(), d); !errors.Is(err, ErrBodyTooLarge) || len(f.calls) != 0 {
+		t.Fatalf("err=%v calls=%v", err, f.calls)
 	}
 }

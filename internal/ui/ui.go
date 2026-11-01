@@ -1193,7 +1193,7 @@ func (u *ui) run(id string, retry func(), step func(context.Context, publish.Exe
 			case errors.Is(err, publish.ErrNotSignedIn):
 				u.retry = retry
 				u.signInDlg.Present(&u.win.Widget)
-			case errors.Is(err, publish.ErrDraftChanged):
+			case errors.Is(err, publish.ErrDraftChanged), errors.Is(err, publish.ErrBodyTooLarge):
 				u.refreshDrafts()
 				u.showError("Couldn't Publish Report", err.Error())
 			case err != nil:

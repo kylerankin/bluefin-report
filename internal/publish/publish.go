@@ -206,29 +206,46 @@ func artifactName(d Draft) string {
 	return "systemd-report.json"
 }
 
-// finalBody is the exact issue body publish posts for a new issue: the reviewed
-// body plus the attachment note, report-id marker and optional queue marker.
+// finalBody is the exact body publish posts: for NewIssue the issue body, for Confirm the
+// "same problem" comment. gistURL is the fallback gist linked by a Confirm comment, if any.
 // Submit checks its byte length before any network write so an over-budget body
 // fails locally instead of after the report has already been uploaded.
-func finalBody(d Draft, reportID string) string {
+func finalBody(d Draft, reportID, gistURL string) string {
 	body := d.Body
+	marker := "\n\n<!-- bluefin-report-id: " + reportID + " -->"
+	if d.Mode == Confirm {
+		switch {
+		case gistURL != "":
+			body += "\n\nFull report: " + gistURL
+		case d.Attachment != nil:
+			body += "\n\nFull report: `" + artifactName(d) + "`, attached to this issue"
+		}
+		return body + marker + "\n<!-- bluefin-report-confirm -->"
+	}
 	if d.Attachment != nil {
 		body += "\n\nFull report: `" + artifactName(d) + "`, attached to this issue (or linked in a comment below)"
 	}
-	body += "\n\n<!-- bluefin-report-id: " + reportID + " -->"
+	body += marker
 	if d.Queue != "" {
 		body += "\n<!-- hive-queue: " + d.Queue + " -->"
 	}
 	return body
 }
 
+// maxGistURL is the longest gist URL a Confirm comment can link: a 39-character login and a 32-hex id.
+var maxGistURL = "https://gist.github.com/" + strings.Repeat("x", 39) + "/" + strings.Repeat("0", 32)
+
 // checkBodyBudget rejects a body, plus the bytes publish appends to it, that
 // would exceed the issue-body budget. It fails before any remote write so the
-// user trims the reviewed body in Review instead of getting a late issue failure.
+// user trims the reviewed body in Review instead of getting a late failure.
+// A Confirm report may fall back to a gist only after upload, so the longest link is budgeted up front.
 func checkBodyBudget(d Draft, reportID string) error {
-	body := finalBody(d, reportID)
-	if len(body) > MaxBodyBytes {
-		return fmt.Errorf("%w: %d bytes over the %d byte budget", ErrBodyTooLarge, len(body), MaxBodyBytes)
+	gist := ""
+	if d.Mode == Confirm && d.Attachment != nil {
+		gist = maxGistURL
+	}
+	if n := max(len(finalBody(d, reportID, "")), len(finalBody(d, reportID, gist))); n > MaxBodyBytes {
+		return fmt.Errorf("%w: %d bytes, over the %d byte budget", ErrBodyTooLarge, n, MaxBodyBytes)
 	}
 	return nil
 }
@@ -602,7 +619,7 @@ func run(ctx context.Context, gh Exec, dir string, s *Saved) (Result, error) {
 	}
 	fresh, labeled := false, false // labels known only when the issue was created in this run
 	if s.Stage == Reviewed {
-		body := finalBody(d, s.ReportID)
+		body := finalBody(d, s.ReportID, "")
 		// REST create: labels/type are silently dropped for non-maintainers instead of failing the create.
 		args := []string{"api", "--method", "POST", "repos/" + d.Repo + "/issues", "-f", "title=" + d.Title,
 			"-F", "body=@-", "-f", "labels[]=kind/bug"}
@@ -768,14 +785,7 @@ func run(ctx context.Context, gh Exec, dir string, s *Saved) (Result, error) {
 			posted = strings.TrimSpace(string(out)) != ""
 		}
 		if !posted {
-			body := d.Body
-			switch {
-			case s.GistURL != "":
-				body += "\n\nFull report: " + s.GistURL
-			case d.Attachment != nil:
-				body += "\n\nFull report: `" + name + "`, attached to this issue"
-			}
-			body += "\n\n" + marker + "\n<!-- bluefin-report-confirm -->"
+			body := finalBody(d, s.ReportID, s.GistURL)
 			args := append([]string{"issue", "comment", "--repo", d.Repo, "--body-file", "-"}, attachArgs(d.Screenshots)...)
 			if _, errb, err := gh(ctx, []byte(body), append(args, "--", n)...); err != nil {
 				return warn("commenting", err, errb)
