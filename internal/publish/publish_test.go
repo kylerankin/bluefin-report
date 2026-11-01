@@ -999,3 +999,68 @@ func TestScreenshotLimits(t *testing.T) {
 		}
 	}
 }
+
+// bodyOverhead is the bytes finalBody appends to a reviewed body of a given
+// shape: the attachment note (when an attachment is present), the report-id
+// marker and the queue marker. It is what pushes an otherwise-fitting body over
+// the budget, so the tests size bodies against it rather than against the raw
+// limit.
+func bodyOverhead(t *testing.T, d Draft, id string) int {
+	t.Helper()
+	d.ReportID, d.Body = id, ""
+	return len(finalBody(d, id))
+}
+
+func TestSubmitRejectsOversizedBody(t *testing.T) {
+	id := NewReportID()
+	overhead := bodyOverhead(t, draft, id)
+
+	// Exact boundary: a body whose final issue body lands exactly on the 60 KB
+	// budget is accepted and posted; one byte over is rejected before any gh
+	// call, with no gist upload or issue write attempted.
+	atLimit := strings.Repeat("x", MaxBodyBytes-overhead)
+	probe := draft
+	probe.ReportID, probe.Body = id, atLimit
+	if got := len(finalBody(probe, id)); got != MaxBodyBytes {
+		t.Fatalf("setup: finalBody=%d, want %d", got, MaxBodyBytes)
+	}
+	{
+		f, dir := newFake(), t.TempDir()
+		d := draft
+		d.ReportID, d.Body = id, atLimit
+		if _, err := Submit(context.Background(), f.exec, dir, d); err != nil {
+			t.Fatalf("body exactly on the budget must pass: %v", err)
+		}
+		if f.count(create) != 1 {
+			t.Fatalf("on-budget body was not posted: %v", f.calls)
+		}
+	}
+
+	// One byte over the budget is rejected before any remote write.
+	{
+		f, dir := newFake(), t.TempDir()
+		d := draft
+		d.ReportID, d.Body = NewReportID(), strings.Repeat("y", MaxBodyBytes-overhead+1)
+		if _, err := Submit(context.Background(), f.exec, dir, d); !errors.Is(err, ErrBodyTooLarge) {
+			t.Fatalf("want ErrBodyTooLarge, got %v", err)
+		}
+		if len(f.calls) != 0 {
+			t.Fatalf("oversized body must fail before any gh call, got %v", f.calls)
+		}
+	}
+
+	// The generated suffix alone can blow the budget: a body that fits on its
+	// own is rejected once the attachment note and markers are appended, and
+	// again with no gh call made.
+	{
+		f, dir := newFake(), t.TempDir()
+		d := draft
+		d.ReportID, d.Body = NewReportID(), strings.Repeat("z", MaxBodyBytes)
+		if _, err := Submit(context.Background(), f.exec, dir, d); !errors.Is(err, ErrBodyTooLarge) {
+			t.Fatalf("want ErrBodyTooLarge for suffix-pushed body, got %v", err)
+		}
+		if len(f.calls) != 0 {
+			t.Fatalf("must fail before any gh call, got %v", f.calls)
+		}
+	}
+}

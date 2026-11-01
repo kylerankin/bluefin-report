@@ -56,6 +56,11 @@ const (
 	MaxScreenshotBytes = 10 << 20
 )
 
+// MaxBodyBytes is the issue-body budget from design §6: 60 KB. GitHub allows
+// 65,536 characters; the report stays under the 60 KB we reserve so the
+// attachment note, report-id marker and queue marker publish append also fit.
+const MaxBodyBytes = 60 * 1024
+
 // ScreenshotExts are the attachable file types: those stdlib can decode and re-encode.
 var ScreenshotExts = []string{".png", ".jpg", ".jpeg", ".gif"}
 
@@ -201,6 +206,33 @@ func artifactName(d Draft) string {
 	return "systemd-report.json"
 }
 
+// finalBody is the exact issue body publish posts for a new issue: the reviewed
+// body plus the attachment note, report-id marker and optional queue marker.
+// Submit checks its byte length before any network write so an over-budget body
+// fails locally instead of after the report has already been uploaded.
+func finalBody(d Draft, reportID string) string {
+	body := d.Body
+	if d.Attachment != nil {
+		body += "\n\nFull report: `" + artifactName(d) + "`, attached to this issue (or linked in a comment below)"
+	}
+	body += "\n\n<!-- bluefin-report-id: " + reportID + " -->"
+	if d.Queue != "" {
+		body += "\n<!-- hive-queue: " + d.Queue + " -->"
+	}
+	return body
+}
+
+// checkBodyBudget rejects a body, plus the bytes publish appends to it, that
+// would exceed the issue-body budget. It fails before any remote write so the
+// user trims the reviewed body in Review instead of getting a late issue failure.
+func checkBodyBudget(d Draft, reportID string) error {
+	body := finalBody(d, reportID)
+	if len(body) > MaxBodyBytes {
+		return fmt.Errorf("%w: %d bytes over the %d byte budget", ErrBodyTooLarge, len(body), MaxBodyBytes)
+	}
+	return nil
+}
+
 // Saved is the on-disk state of one draft.
 type Saved struct {
 	ReportID  string
@@ -218,7 +250,10 @@ type Saved struct {
 // ErrDraftChanged means a saved draft no longer matches what was reviewed, so Resume will never publish it.
 var ErrDraftChanged = errors.New("it was not published. Discard it from Drafts and start a new report")
 
-var ErrNotSignedIn = errors.New("gh is not signed in; run `gh auth login`")
+var (
+	ErrNotSignedIn  = errors.New("gh is not signed in; run `gh auth login`")
+	ErrBodyTooLarge = errors.New("reviewed issue body exceeds the 60 KB issue-body budget; trim it in Review and publish again")
+)
 
 // Repos are the image repos that accept reports. A machine reports only to the repo of the image it runs.
 var Repos = []string{"projectbluefin/dakota", "projectbluefin/utah"}
@@ -348,6 +383,9 @@ func Submit(ctx context.Context, gh Exec, stateDir string, d Draft) (Result, err
 		return Result{IssueURL: s.IssueURL, GistURL: s.GistURL}, nil
 	}
 	if err := checkScreenshots(d.Screenshots); err != nil {
+		return Result{}, err
+	}
+	if err := checkBodyBudget(d, d.ReportID); err != nil {
 		return Result{}, err
 	}
 	// Same report submitted again: only resume the payload that was reviewed.
@@ -564,14 +602,7 @@ func run(ctx context.Context, gh Exec, dir string, s *Saved) (Result, error) {
 	}
 	fresh, labeled := false, false // labels known only when the issue was created in this run
 	if s.Stage == Reviewed {
-		body := d.Body
-		if d.Attachment != nil {
-			body += "\n\nFull report: `" + name + "`, attached to this issue (or linked in a comment below)"
-		}
-		body += "\n\n<!-- bluefin-report-id: " + s.ReportID + " -->"
-		if d.Queue != "" {
-			body += "\n<!-- hive-queue: " + d.Queue + " -->"
-		}
+		body := finalBody(d, s.ReportID)
 		// REST create: labels/type are silently dropped for non-maintainers instead of failing the create.
 		args := []string{"api", "--method", "POST", "repos/" + d.Repo + "/issues", "-f", "title=" + d.Title,
 			"-F", "body=@-", "-f", "labels[]=kind/bug"}
