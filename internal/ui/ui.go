@@ -378,7 +378,7 @@ func (u *ui) buildOverview() *adw.NavigationPage {
 		menu.AppendItem(item)
 	}
 	section([2]string{"_Drafts", "win.drafts"})
-	section([2]string{"_Keyboard Shortcuts", "win.shortcuts"}, [2]string{"_Help", "win.help"}, [2]string{"_About " + appName, "win.about"})
+	section([2]string{"_Keyboard Shortcuts…", "win.shortcuts"}, [2]string{"_Help", "win.help"}, [2]string{"_About " + appName + "…", "win.about"})
 	mb := gtk.NewMenuButton()
 	mb.SetIconName("open-menu-symbolic")
 	mb.SetTooltipText("Main Menu")
