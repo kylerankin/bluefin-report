@@ -2,6 +2,7 @@ package privacy
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -300,5 +301,40 @@ func TestDefaultBudgetLeavesRoomForFence(t *testing.T) {
 	}
 	if n := len("```json\n") + len(p.JSON) + len("\n```\n"); len(p.Omitted) == 0 || n >= 1<<20 {
 		t.Fatalf("fenced artifact is %d bytes, omitted %v", n, p.Omitted)
+	}
+}
+
+// When the system scope is empty there is no io.systemd.Basic.Hostname metric,
+// so no hostname literal was ever registered and a host mentioned only in a
+// user metric or opt-in extra would leak into the attachment. os.Hostname()
+// supplies the machine identity so it is still scrubbed.
+func TestBuildScrubbersHostnameFromEmptySystemScope(t *testing.T) {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		t.Skipf("no hostname available: %v", err)
+	}
+	if len(host) < 3 {
+		t.Skipf("hostname %q too short for the 3-char literal floor", host)
+	}
+	s := snapshot.Snapshot{
+		System: snapshot.Report{MediaType: "application/vnd.io.systemd.report", Metrics: []snapshot.Metric{}},
+		User: snapshot.Report{Metrics: []snapshot.Metric{
+			metric("io.systemd.Manager.UnitActiveState", host+"\\x2ddesktop.scope", "active"),
+		}},
+	}
+	p, err := Build(s, Options{Username: "jorge", IncludeUser: true,
+		Extras: map[string]string{"bootErrors": "Oct 31 10:00:01 " + host + " systemd[1]: backup failed\n"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(p.JSON)
+	if strings.Contains(out, host) {
+		t.Errorf("payload still contains the hostname %q from an empty system scope", host)
+	}
+	if !strings.Contains(out, "[hostname]") {
+		t.Errorf("expected hostname rule to fire, Removed = %v", p.Removed)
+	}
+	if p.Removed["hostname"] < 2 {
+		t.Errorf("expected hostname scrubbed from user metric and extras, Removed = %v", p.Removed)
 	}
 }

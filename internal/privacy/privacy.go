@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -82,10 +83,25 @@ func Build(s snapshot.Snapshot, opt Options) (Payload, error) {
 		opt.MaxBytes = MaxBytes
 	}
 	r := redactor{removed: map[string]int{}}
+	// Learn the hostname from the collected metric, but also resolve it
+	// independently: an empty system scope (unreadable generate output) leaves
+	// no hostname literal registered, so a user metric or opt-in extra could
+	// carry the host into the attachment. os.Hostname() is the machine's own
+	// identity, available even when systemd never reported one.
+	hostname := ""
 	for _, m := range s.System.Metrics {
 		if m.Name == "io.systemd.Basic.Hostname" {
-			r.literal("hostname", m.String())
+			hostname = m.String()
+			break
 		}
+	}
+	if hostname == "" {
+		if h, err := os.Hostname(); err == nil {
+			hostname = h
+		}
+	}
+	if hostname != "" {
+		r.literal("hostname", hostname)
 	}
 	r.literal("username", opt.Username)
 
