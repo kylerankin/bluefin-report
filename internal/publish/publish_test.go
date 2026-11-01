@@ -1096,3 +1096,17 @@ func TestSubmitConfirmBodyBudget(t *testing.T) {
 		t.Fatalf("err=%v calls=%v", err, f.calls)
 	}
 }
+
+// A draft saved before the budget existed must not be posted when resumed.
+func TestResumeRejectsOversizedSavedDraft(t *testing.T) {
+	dir := t.TempDir()
+	d := draft
+	d.ReportID, d.Body = "old", strings.Repeat("x", MaxBodyBytes+1)
+	if err := save(dir, &Saved{ReportID: d.ReportID, Stage: Reviewed, Draft: d}); err != nil {
+		t.Fatal(err)
+	}
+	f := newFake()
+	if _, err := Resume(context.Background(), f.exec, dir, d.ReportID); !errors.Is(err, ErrBodyTooLarge) || f.count(create) != 0 {
+		t.Fatalf("err=%v calls=%v", err, f.calls)
+	}
+}

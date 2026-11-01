@@ -597,6 +597,12 @@ func lookup(ctx context.Context, gh Exec, s *Saved) error {
 func run(ctx context.Context, gh Exec, dir string, s *Saved) (Result, error) {
 	d := s.Draft
 	name := artifactName(d)
+	// Resume reaches run without Submit's early check; still refuse any unposted body over budget.
+	if s.Stage == Reviewed || d.Mode == Confirm && s.Stage != Published {
+		if err := checkBodyBudget(d, s.ReportID); err != nil {
+			return Result{}, err
+		}
+	}
 	if d.Mode == Confirm && s.Stage == Reviewed { // the issue exists: go straight to attaching the report
 		s.IssueURL, s.Stage = "https://github.com/"+d.Repo+"/issues/"+d.IssueRef, LabelsDone
 	}
