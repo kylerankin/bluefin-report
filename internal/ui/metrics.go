@@ -6,8 +6,9 @@ import (
 	"github.com/projectbluefin/bluefin-report/internal/snapshot"
 )
 
-// familyName returns the family a metric belongs to: the full family name, or
-// the metric name itself when it has no object.
+// familyName returns the display name of a metric row: the family name, or the
+// metric name plus its object when the metric is tied to a specific object.
+// familyFor reverses it to find the metric's family.
 func familyName(m snapshot.Metric) string {
 	name := m.Name
 	if m.Object != "" {
@@ -16,12 +17,15 @@ func familyName(m snapshot.Metric) string {
 	return name
 }
 
-// familyFor looks up a metric's family descriptions. It strips the "user: "
-// prefix the metrics list prepends to user metrics so the lookup matches the
-// family names describe reports for both scopes.
+// familyFor looks up a metric's family descriptions. It reverses familyName:
+// it strips the "user: " prefix the list prepends and the " [object]" suffix it
+// appends, so the lookup matches the family names describe reports by name only.
 func familyFor(name string, fams map[string]snapshot.Family) snapshot.Family {
 	if strings.HasPrefix(name, "user: ") {
 		name = strings.TrimPrefix(name, "user: ")
+	}
+	if i := strings.Index(name, " ["); i >= 0 { // rows append " [object]"; families are keyed by name only
+		name = name[:i]
 	}
 	return fams[name]
 }

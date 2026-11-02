@@ -220,11 +220,7 @@ func (u *ui) loaded(s snapshot.Snapshot, err error) {
 
 	rows := make([]string, 0, len(s.System.Metrics)+len(s.User.Metrics))
 	row := func(prefix string, m snapshot.Metric) string {
-		name := prefix + m.Name
-		if m.Object != "" {
-			name += " [" + m.Object + "]"
-		}
-		return name + "\n" + m.String() // bind splits name / value onto two lines
+		return prefix + familyName(m) + "\n" + m.String() // bind splits name / value onto two lines
 	}
 	for _, m := range s.System.Metrics {
 		rows = append(rows, row("", m))
@@ -406,6 +402,7 @@ func (u *ui) loadMetricDescriptions() {
 			f, w, err := snapshot.Describe(context.Background(), snapshot.Run, scope)
 			warns = append(warns, w...)
 			if err != nil {
+				warns = append(warns, fmt.Sprintf("%s describe: %v", scope, err)) // call() only warns on non-cannot-start paths
 				continue
 			}
 			for name, fam := range f {
@@ -415,10 +412,10 @@ func (u *ui) loadMetricDescriptions() {
 			}
 		}
 		post(func() {
+			u.families = fams  // descriptions are snapshot-independent; store before the nil check
 			if u.snap == nil { // a refresh replaced the snapshot while we were fetching
 				return
 			}
-			u.families = fams
 			u.snap.Warnings = append(u.snap.Warnings, warns...)
 			u.sum = u.snap.Summary()
 			u.syncHealth()

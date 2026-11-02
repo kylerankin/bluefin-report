@@ -276,7 +276,7 @@ Status: **Kept** = shipped, possibly reshaped. **Follow-up** = belongs to the cu
 | Static facts (OS, kernel, arch, image, CPU, GPU) | Kept | Overview "This System" group. The prompt's hostname, machine/boot ID and SMBIOS serials are not shown and are dropped from the attachment (§6). |
 | Per-fact Copy button, export | Follow-up | Metric values copy and the reviewed report exports (Journey C); copy on Overview fact rows is not built. |
 | Raw metric browsing | Kept | Metrics page, both scopes, user rows prefixed `user:`. |
-| `describe` metadata in tooltips | Follow-up | `snapshot.Describe` parses it; no UI caller yet. Tooltips show only name and value. |
+| `describe` metadata in tooltips | Done | `snapshot.Describe` parses it; `ui.metricTooltip` shows it on hover over each metrics row (internal/ui/metrics.go). |
 | System/user scope toggle | Deferred | Both scopes are always collected (§5). A Metrics-page scope filter is a refinement, not a requirement. |
 | Dot-boundary match filtering | Deferred | `snapshot.Take` forwards matches; the UI filters by case-insensitive substring over rendered rows, which also finds values. |
 | Inspect and save the compiled JSON report | Kept | Review "Attachment" tab shows the scrubbed `generate` object; Export Report… saves it (§4, §6). |

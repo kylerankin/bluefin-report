@@ -58,6 +58,19 @@ func TestMetricTooltip(t *testing.T) {
 	}
 }
 
+func TestMetricTooltipStripsObject(t *testing.T) {
+	fams := map[string]snapshot.Family{
+		"io.systemd.Manager.UnitActiveState": {Description: "State of a systemd unit", Type: "Manager"},
+	}
+	// A metric tied to an object is rendered as "name [object]"; the tooltip must
+	// still resolve the family behind it, not fall back to name = value.
+	got := metricTooltip("io.systemd.Manager.UnitActiveState [sshd.service]", "active", fams)
+	want := "io.systemd.Manager.UnitActiveState [sshd.service] = active\nState of a systemd unit · Manager"
+	if got != want {
+		t.Errorf("metricTooltip object: got %q, want %q", got, want)
+	}
+}
+
 func TestMetricTooltipStripsUserPrefix(t *testing.T) {
 	fams := map[string]snapshot.Family{
 		"io.systemd.Basic.OSRelease.NAME": {Description: "The operating system name", Type: "Basic"},
