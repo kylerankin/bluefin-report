@@ -99,6 +99,13 @@ type ui struct {
 	filter      *gtk.StringFilter
 	search      *gtk.SearchEntry
 	syncResults func() // filtered n-items notify misses 0→0 when the store empties under a query
+	// families holds family metadata from `systemd-report describe`, loaded lazily
+	// the first time the Metrics page is shown; metricRows are the current rows,
+	// refreshed once the descriptions arrive so already-realised rows pick up their
+	// tooltips without rebuilding the list.
+	families      map[string]snapshot.Family
+	metricRows    []string
+	familiesReady bool // describe has been requested at least once
 
 	// compose
 	mode        publish.Mode
