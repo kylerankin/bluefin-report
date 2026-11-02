@@ -128,6 +128,7 @@ func (u *ui) buildOverview() *adw.NavigationPage {
 		// without selecting text; its target value is set from the subtitle on load.
 		copy := gtk.NewButtonFromIconName("edit-copy-symbolic")
 		copy.SetTooltipText(copyFactTooltip(t))
+		a11yLabel(&copy.Widget, copyFactTooltip(t))
 		copy.SetValign(gtk.AlignCenterValue)
 		copy.AddCssClass("flat")
 		copy.SetActionName("win.copy-fact")
@@ -219,10 +220,12 @@ func (u *ui) loaded(s snapshot.Snapshot, err error) {
 	u.sysDetails.SetSubtitle(strings.TrimSpace(u.sum.Name + " " + u.sum.ImageVersion))
 	for i, v := range []string{u.sum.Name, u.sum.ImageVersion, u.sum.ImageID, u.sum.Kernel, u.sum.Arch, u.sum.SystemState,
 		u.ident.Ref, u.ident.Tag, u.ident.Digest, u.ident.CPU, u.ident.GPU, u.ident.GNOME} {
-		if v == "" {
+		known := v != ""
+		if !known {
 			v = "Unknown"
 		}
 		u.sysRows[i].SetSubtitle(v)
+		u.sysCopyBtn[i].SetVisible(known)
 		u.sysCopyBtn[i].SetActionTargetValue(glib.NewVariantString(v))
 	}
 

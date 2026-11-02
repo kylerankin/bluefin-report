@@ -274,7 +274,7 @@ Status: **Kept** = shipped, possibly reshaped. **Follow-up** = belongs to the cu
 | Prompt capability | Status | Where it stands |
 | :--- | :--- | :--- |
 | Static facts (OS, kernel, arch, image, CPU, GPU) | Kept | Overview "This System" group. The prompt's hostname, machine/boot ID and SMBIOS serials are not shown and are dropped from the attachment (§6). |
-| Per-fact Copy button, export | Follow-up | Metric values copy and the reviewed report exports (Journey C); copy on Overview fact rows is not built. |
+| Per-fact Copy button, export | Done / Follow-up | Metric values and Overview fact rows copy (#74); the reviewed report exports (Journey C). |
 | Raw metric browsing | Kept | Metrics page, both scopes, user rows prefixed `user:`. |
 | `describe` metadata in tooltips | Follow-up | `snapshot.Describe` parses it; no UI caller yet. Tooltips show only name and value. |
 | System/user scope toggle | Deferred | Both scopes are always collected (§5). A Metrics-page scope filter is a refinement, not a requirement. |
