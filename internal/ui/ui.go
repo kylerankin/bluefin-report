@@ -91,6 +91,7 @@ type ui struct {
 	spinner    *adw.Spinner
 	statusPage *adw.StatusPage
 	sysRows    [12]*adw.ActionRow
+	sysCopyBtn [12]*gtk.Button
 	ident      extras.Identity
 	health     *gtk.ListBox
 
@@ -274,6 +275,12 @@ func (u *ui) activate() {
 	stringAction("copy-metric", func(value string) {
 		u.win.GetClipboard().SetText(value)
 		u.toast("Metric value copied")
+	})
+	// System-detail rows on the front page carry the same copy affordance, so a
+	// user can grab the version or kernel to paste into a report or a forum post.
+	stringAction("copy-fact", func(value string) {
+		u.win.GetClipboard().SetText(value)
+		u.toast("Copied")
 	})
 	stringAction("draft-resume", u.resume)
 	u.discardAct = stringAction("draft-discard", func(id string) {
